@@ -15,10 +15,10 @@ struct MotorPins {
 };
 
 // Receiver signal pins
-const uint8_t SIDE_PIN   = A0; // CH1
-const uint8_t FORWARD_PIN = A1; // CH2
-const uint8_t TURN_PIN   = A2; // CH4
-const uint8_t ENABLE_PIN = A3; // CH5
+const uint8_t SIDE_PIN    = A0; // CH1: sideways
+const uint8_t FORWARD_PIN = A3; // CH4: forward/backward
+const uint8_t TURN_PIN    = A1; // CH2: rotation
+const uint8_t ENABLE_PIN  = A4; // CH5: enable switch
 
 // Motor driver pins: PWM, IN1, IN2, reverse direction
 const MotorPins FL = {3, 2, 4, false};
@@ -35,7 +35,7 @@ const int PULSE_MAX = 2000;
 const int DEAD_ZONE_US = 40;
 
 // Limit initial testing to 30% PWM.
-const float MAX_DRIVE = 0.30f;
+const float MAX_DRIVE = 0.60f;
 
 bool validPulse(unsigned long pulse) {
   return pulse >= 900 && pulse <= 2100;
@@ -115,7 +115,20 @@ void setMotor(const MotorPins &motor, float command) {
   digitalWrite(motor.in1, command > 0 ? HIGH : LOW);
   digitalWrite(motor.in2, command > 0 ? LOW : HIGH);
 
-  int duty = (int)(abs(command) * MAX_DRIVE * 255.0f);
+  float magnitude = (command < 0.0f) ? -command : command;
+int duty = (int)(magnitude * MAX_DRIVE * 255.0f);
+  
+  if (motor.pwm == FL.pwm) {
+  static unsigned long lastFL = 0;
+  if (millis() - lastFL >= 250) {
+    lastFL = millis();
+    Serial.print("Actual FL command: ");
+    Serial.print(command, 3);
+    Serial.print("  Actual D3 duty: ");
+    Serial.println(duty);
+  }
+}
+
   analogWrite(motor.pwm, duty);
 }
 
@@ -180,6 +193,19 @@ void loop() {
   static unsigned long lastPrint = 0;
 
   if (millis() - lastPrint >= 250) {
+
+    float fl = 0.0f;
+
+if (enabled) {
+  fl = calculateWheelSpeeds(
+      pulseToCommand(forwardPulse),
+      pulseToCommand(sidePulse),
+      pulseToCommand(turnPulse)
+  ).frontLeft;
+}
+
+Serial.print("FL PWM: ");
+Serial.println((int)(abs(fl) * MAX_DRIVE * 255.0f));
     lastPrint = millis();
 
     Serial.print("Side: "); Serial.print(sidePulse);
@@ -187,5 +213,6 @@ void loop() {
     Serial.print(" Turn: "); Serial.print(turnPulse);
     Serial.print(" Enable: "); Serial.print(enablePulse);
     Serial.print(" Driving: "); Serial.println(enabled);
+    
   }
 }
